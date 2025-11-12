@@ -80,6 +80,8 @@ def get_gpt_layer_with_transformer_engine_spec(
     use_te_op_fuser: Optional[bool] = False,
     use_kitchen: bool = False,
     use_te_activation_func: bool = False,
+    use_kitchen_attention: bool = False,
+    kitchen_attention_backend: str = "sdpa",
 ) -> ModuleSpec:
     """Use this spec to use lower-level Transformer Engine modules (required for fp8 training).
 
@@ -107,7 +109,11 @@ def get_gpt_layer_with_transformer_engine_spec(
 
     if use_kitchen:
         assert HAVE_KITCHEN
-        backend: BackendSpecProvider = KitchenSpecProvider(fallback=TESpecProvider())
+        backend: BackendSpecProvider = KitchenSpecProvider(
+            fallback=TESpecProvider(),
+            use_kitchen_attention=use_kitchen_attention,
+            kitchen_attention_backend=kitchen_attention_backend,
+        )
         if use_te_op_fuser:
             raise AssertionError("use_te_op_fuser not compatible with using kitchen in mlp.")
         if use_te_activation_func:
@@ -207,6 +213,8 @@ def get_gpt_layer_local_spec(
     normalization: Optional[str] = None,
     qk_l2_norm: Optional[bool] = False,
     use_kitchen: bool = False,
+    use_kitchen_attention: bool = False,
+    kitchen_attention_backend: str = "sdpa",
 ) -> ModuleSpec:
     """Use this spec for an implementation using only modules in Megatron-Core.
 
@@ -226,7 +234,11 @@ def get_gpt_layer_local_spec(
 
     if use_kitchen:
         assert HAVE_KITCHEN
-        backend = KitchenSpecProvider(fallback=LocalSpecProvider())
+        backend = KitchenSpecProvider(
+            fallback=LocalSpecProvider(),
+            use_kitchen_attention=use_kitchen_attention,
+            kitchen_attention_backend=kitchen_attention_backend,
+        )
     else:
         backend = LocalSpecProvider()
     # Adjust for RMS norm.
@@ -421,6 +433,8 @@ def get_gpt_decoder_block_spec(
             qk_l2_norm=qk_l2_norm,
             use_kitchen=config.use_kitchen,
             use_te_activation_func=config.use_te_activation_func,
+            use_kitchen_attention=config.use_kitchen_attention,
+            kitchen_attention_backend=config.kitchen_attention_backend,
         )
         moe_layer_spec = get_gpt_layer_with_transformer_engine_spec(
             num_experts=config.num_moe_experts,
@@ -431,6 +445,8 @@ def get_gpt_decoder_block_spec(
             qk_l2_norm=qk_l2_norm,
             use_kitchen=config.use_kitchen,
             use_te_activation_func=config.use_te_activation_func,
+            use_kitchen_attention=config.use_kitchen_attention,
+            kitchen_attention_backend=config.kitchen_attention_backend,
         )
     else:
         layer_norm_impl = LNImpl
@@ -443,6 +459,8 @@ def get_gpt_decoder_block_spec(
             normalization=normalization,
             qk_l2_norm=qk_l2_norm,
             use_kitchen=config.use_kitchen,
+            use_kitchen_attention=config.use_kitchen_attention,
+            kitchen_attention_backend=config.kitchen_attention_backend,
         )
         moe_layer_spec = get_gpt_layer_local_spec(
             num_experts=config.num_moe_experts,
@@ -453,6 +471,8 @@ def get_gpt_decoder_block_spec(
             normalization=normalization,
             qk_l2_norm=qk_l2_norm,
             use_kitchen=config.use_kitchen,
+            use_kitchen_attention=config.use_kitchen_attention,
+            kitchen_attention_backend=config.kitchen_attention_backend,
         )
 
     # Parse config.moe_layer_freq to determine the pattern of expert/dense layers.
@@ -518,13 +538,21 @@ def get_gpt_mtp_block_spec(
     """GPT Multi-Token Prediction (MTP) block spec."""
     if use_transformer_engine:
         backend: BackendSpecProvider = (
-            KitchenSpecProvider(fallback=TESpecProvider())
+            KitchenSpecProvider(
+                fallback=TESpecProvider(),
+                use_kitchen_attention=config.use_kitchen_attention,
+                kitchen_attention_backend=config.kitchen_attention_backend,
+            )
             if config.use_kitchen
             else TESpecProvider()
         )
     else:
         backend = (
-            KitchenSpecProvider(fallback=LocalSpecProvider())
+            KitchenSpecProvider(
+                fallback=LocalSpecProvider(),
+                use_kitchen_attention=config.use_kitchen_attention,
+                kitchen_attention_backend=config.kitchen_attention_backend,
+            )
             if config.use_kitchen
             else LocalSpecProvider()
         )
