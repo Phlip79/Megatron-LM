@@ -2,6 +2,15 @@
 
 import pytest
 
+from megatron.core.extensions.kitchen import (
+    KitchenColumnParallelGroupedLinear,
+    KitchenColumnParallelLinear,
+    KitchenDotProductAttention,
+    KitchenFlashAttention,
+    KitchenLayerNormColumnParallelLinear,
+    KitchenRowParallelGroupedLinear,
+    KitchenRowParallelLinear,
+)
 from megatron.core.models.gpt import GPTModel
 from megatron.core.models.gpt.gpt_layer_specs import get_gpt_decoder_block_spec
 from megatron.core.quantization.quant_config import MatchContext, RecipeConfig
@@ -11,21 +20,13 @@ from tests.unit_tests.test_utilities import Utils
 
 try:
     HAVE_TE = True
-    import transformer_engine as te
+    import transformer_engine as te  # type: ignore[import-untyped]
 except ImportError:
     HAVE_TE = False
 
 try:
-    import nvidia_kitchen
-    from megatron.core.extensions.kitchen import (
-        KitchenColumnParallelGroupedLinear,
-        KitchenColumnParallelLinear,
-        KitchenLayerNormColumnParallelLinear,
-        KitchenRowParallelGroupedLinear,
-        KitchenRowParallelLinear,
-        KitchenDotProductAttention,
-        KitchenFlashAttention,
-    )
+    import nvidia_kitchen  # type: ignore[import-not-found]
+
     HAVE_KITCHEN = True
 except ImportError:
     HAVE_KITCHEN = False
@@ -164,7 +165,6 @@ class TestGPTModelKitchenQuantizationConfig:
                 assert module.kitchen_quant_params.match_input == expected_match[name][0]
         assert visited_keys == set(expected_types.keys())
 
-
     def test_kitchen_config_resolution_dense_compound_params(self) -> None:
         transformer_config = TransformerConfig(
             num_layers=2,
@@ -185,18 +185,16 @@ class TestGPTModelKitchenQuantizationConfig:
                             "pattern": "*fc2",
                             "config": "fp8_cs",
                         },
-                        "all": {
-                            "type": "glob",
-                            "enabled": True,
-                            "pattern": "*",
-                            "config": "bf16",
-                        },
+                        "all": {"type": "glob", "enabled": True, "pattern": "*", "config": "bf16"},
                     },
                     "configs": {
-                        "bf16": {"kitchen_config_type": "CompoundParams", "configs": [
-                            {"kitchen_config_type": "QLinearParams", "recipe_idx": 1},
-                            {"kitchen_config_type": "QAttentionParams", "recipe_idx": 1}
-                        ]},
+                        "bf16": {
+                            "kitchen_config_type": "CompoundParams",
+                            "configs": [
+                                {"kitchen_config_type": "QLinearParams", "recipe_idx": 1},
+                                {"kitchen_config_type": "QAttentionParams", "recipe_idx": 1},
+                            ],
+                        },
                         "fp8_cs": {"kitchen_config_type": "QLinearParams", "recipe_idx": 2},
                     },
                 }
@@ -553,12 +551,7 @@ class TestGPTModelKitchenQuantizationConfig:
             quant_recipe=RecipeConfig.from_config_dict(
                 {
                     "matchers": {
-                        "all": {
-                            "type": "glob",
-                            "enabled": True,
-                            "pattern": "*",
-                            "config": "mixed",
-                        },
+                        "all": {"type": "glob", "enabled": True, "pattern": "*", "config": "mixed"}
                     },
                     "configs": {
                         "mixed": {
@@ -570,7 +563,7 @@ class TestGPTModelKitchenQuantizationConfig:
                                     "recipe_name": "triton_fa_bf16_for_all_natural",
                                 },
                             ],
-                        },
+                        }
                     },
                 }
             ),

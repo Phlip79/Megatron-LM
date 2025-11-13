@@ -20,6 +20,7 @@ from megatron.core.transformer.multi_token_prediction import (
     get_mtp_layer_spec_for_backend,
     get_mtp_num_layers_to_build,
 )
+from megatron.core.transformer.pipeline_parallel_layer_layout import PipelineParallelLayerLayout
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.torch_norm import L2Norm
 from megatron.core.transformer.transformer_block import (
@@ -32,6 +33,7 @@ from megatron.core.transformer.transformer_layer import (
     TransformerLayerSubmodules,
     get_transformer_layer_offset,
 )
+from megatron.core.utils import is_te_min_version
 
 try:
     import transformer_engine as te  # pylint: disable=unused-import
@@ -510,9 +512,11 @@ def get_gpt_decoder_block_spec(
     num_layers_to_build = get_num_layers_to_build(config, vp_stage=vp_stage, pp_rank=pp_rank)
 
     if config.pipeline_model_parallel_layout is not None:
+        layout = config.pipeline_model_parallel_layout
+        assert isinstance(layout, PipelineParallelLayerLayout)
         local_layer_specs = [
             layer_specs[layer_id]
-            for layer_id in config.pipeline_model_parallel_layout.get_layer_id_list(
+            for layer_id in layout.get_layer_id_list(
                 layer_type=LayerType.decoder, vp_stage=vp_stage, pp_rank=pp_rank
             )
         ]
@@ -593,7 +597,7 @@ def get_gpt_mtp_block_spec_for_backend(
     if len(mtp_layer_specs) > 0:
         assert (
             len(mtp_layer_specs) == config.mtp_num_layers
-        ), +f"currently all of the mtp layers must stage in the same pipeline stage."
+        ), f"currently all of the mtp layers must stage in the same pipeline stage."
         mtp_block_spec = MultiTokenPredictionBlockSubmodules(layer_specs=mtp_layer_specs)
     else:
         mtp_block_spec = None

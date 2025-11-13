@@ -1,16 +1,16 @@
 # Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
 
+import logging
+import math
 import warnings
 from dataclasses import dataclass, fields
 from enum import Enum
-import math
-from typing import Any, Callable, Dict, Optional, Set, Tuple
-import logging
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import torch
 from torch import Tensor
 
-
+from megatron.core import tensor_parallel
 from megatron.core.dist_checkpointing.utils import replace_prefix_for_sharding
 from megatron.core.fusions.fused_softmax import FusedScaleMaskSoftmax
 from megatron.core.model_parallel_config import ModelParallelConfig
@@ -30,14 +30,12 @@ from megatron.core.tensor_parallel.random import (
 )
 from megatron.core.tensor_parallel.utils import divide
 from megatron.core.transformer.enums import AttnMaskType
+from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.moe.experts import GroupedMLP, SequentialMLP, TEGroupedMLP
-from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.utils import attention_mask_func, make_sharded_tensors_for_checkpoint
 from megatron.core.utils import get_tensor_model_parallel_group_if_none
-from megatron.core import tensor_parallel
-
 
 logger = logging.getLogger(__name__)
 
@@ -45,33 +43,48 @@ logger = logging.getLogger(__name__)
 # Parsing constant
 _KITCHEN_CONFIG_TYPE_KEY = "kitchen_config_type"
 try:
-    import nvidia_kitchen
+    import nvidia_kitchen  # type: ignore[import-not-found]
+
     # Kitchen imports for SDPA
-    from nvidia_kitchen.attention import QuantizedBMM, QAttentionParams
-    from nvidia_kitchen.config import QLinearParams, get_qlinear_params_from_qat_params
-    from nvidia_kitchen.config_attention_recipe import get_qattention_params_from_qat_params
+    from nvidia_kitchen.attention import (  # type: ignore[import-not-found]
+        QAttentionParams,
+        QuantizedBMM,
+    )
+    from nvidia_kitchen.config import (  # type: ignore[import-not-found]
+        QLinearParams,
+        get_qlinear_params_from_qat_params,
+    )
+    from nvidia_kitchen.config_attention_recipe import (  # type: ignore[import-not-found]
+        get_qattention_params_from_qat_params,
+    )
+    from nvidia_kitchen.config_fa_recipe import (  # type: ignore[import-not-found]
+        get_qfa_params_from_recipe_name,
+    )
 
     # Kitchen imports for FA
-    from nvidia_kitchen.fa import KitchenFlashAttentionModule
-    from nvidia_kitchen.fa_params import QFlashAttentionParams
-    from nvidia_kitchen.config_fa_recipe import get_qfa_params_from_recipe_name
+    from nvidia_kitchen.fa import KitchenFlashAttentionModule  # type: ignore[import-not-found]
+    from nvidia_kitchen.fa_params import QFlashAttentionParams  # type: ignore[import-not-found]
+
     HAVE_KITCHEN = True
 except ImportError:
+    from unittest.mock import MagicMock
+
     HAVE_KITCHEN = False
-    nvidia_kitchen = None
-
-    QuantizedBMM = None
-    QAttentionParams = None
-    QLinearParams = None
-    get_qlinear_params_from_qat_params = None
-    get_qattention_params_from_qat_params = None
-
-    KitchenFlashAttentionModule = None
-    QFlashAttentionParams = None
-    get_qfa_params_from_recipe_name = None
+    nvidia_kitchen = MagicMock()
+    QuantizedBMM = MagicMock()
+    QAttentionParams = MagicMock()
+    QLinearParams = MagicMock()
+    get_qlinear_params_from_qat_params = MagicMock()
+    get_qattention_params_from_qat_params = MagicMock()
+    KitchenFlashAttentionModule = MagicMock()
+    QFlashAttentionParams = MagicMock()
+    get_qfa_params_from_recipe_name = MagicMock()
 
 
-def is_rank_0():
+def is_rank_0() -> bool:
+    """
+    Checks if the current GPU rank is 0.
+    """
     return (not torch.distributed.is_initialized()) or torch.distributed.get_rank() == 0
 
 
@@ -92,14 +105,14 @@ class QFlashAttentionParamsConfigSchema:
     kitchen_config_type: KitchenConfigType
     recipe_name: str
 
-
     @classmethod
     def parse_config_dict(cls, config_dict: Dict[Any, Any]) -> 'QFlashAttentionParamsConfigSchema':
         """
         Parse config dictionary and return a schema instance.
 
 
-        Expected config format: {"kitchen_config_type": "QFlashAttentionParams", "recipe_name": <str>}
+        Expected config format:
+            {"kitchen_config_type": "QFlashAttentionParams", "recipe_name": <str>}
         """
         expected_keys = cls.get_expected_keys()
         actual_keys = set(config_dict.keys())
@@ -159,7 +172,7 @@ class QAttentionParamsConfigSchema:
     recipe_idx: int
 
     @classmethod
-    def parse_config_dict(cls, config_dict: Dict[Any, Any]) -> 'QLinearParamsConfigSchema':
+    def parse_config_dict(cls, config_dict: Dict[Any, Any]) -> 'QAttentionParamsConfigSchema':
         """
         Parse config dictionary and return a schema instance.
 
@@ -369,12 +382,21 @@ class CompoundParamsConfigSchema:
                 raise ValueError(f"Unsupported config type '{config['kitchen_config_type']}'.")
 
     def get_qlinear_params(self) -> Optional[QLinearParams]:
+        """
+        Returns the QLinearParams object for the compound params.
+        """
         return self.q_linear_params.to_kitchen_qlinear() if self.q_linear_params else None
 
     def get_qattention_params(self) -> Optional[QAttentionParams]:
+        """
+        Returns the QAttentionParams object for the compound params.
+        """
         return self.q_attention_params.to_kitchen_qattention() if self.q_attention_params else None
 
     def get_qfa_params(self) -> Optional[QFlashAttentionParams]:
+        """
+        Returns the QFlashAttentionParams object for the compound params.
+        """
         return self.q_fa_params.to_kitchen_qfa() if self.q_fa_params else None
 
 
@@ -1320,15 +1342,16 @@ class KitchenFlashAttention(MegatronModule):
     Flash Attention implementation for Kitchen.
     """
 
-    def __init__(self,
+    def __init__(
+        self,
         config: TransformerConfig,
         layer_number: int,
         attn_mask_type: AttnMaskType,
         attention_type: str,
-        attention_dropout: float = None,
-        softmax_scale: float = None,
-        cp_comm_type: str = None,
-        model_comm_pgs: ModelCommProcessGroups = None,
+        attention_dropout: Optional[float] = None,
+        softmax_scale: Optional[float] = None,
+        cp_comm_type: Optional[str] = None,
+        model_comm_pgs: Optional[ModelCommProcessGroups] = None,
     ):
         super().__init__(config=config)
 
@@ -1348,7 +1371,9 @@ class KitchenFlashAttention(MegatronModule):
         self.attn_mask_type = attn_mask_type
         self.attention_type = attention_type  # unused for now
 
-        projection_size = self.config.kv_channels * self.config.num_attention_heads
+        kv_channels = self.config.kv_channels
+        assert kv_channels is not None, "kv_channels must be set for KitchenFlashAttention"
+        projection_size = kv_channels * self.config.num_attention_heads
 
         # Per attention head and per partition values.
         if model_comm_pgs is None:
@@ -1374,11 +1399,16 @@ class KitchenFlashAttention(MegatronModule):
             coeff = self.layer_number
             self.softmax_scale /= coeff
 
-        self.attention_dropout = self.config.attention_dropout if attention_dropout is None else attention_dropout
+        self.attention_dropout = (
+            self.config.attention_dropout if attention_dropout is None else attention_dropout
+        )
 
         self.init_finished = False
 
     def finish_init(self, quantization_config: QuantizationConfig):
+        """
+        Finishes the initialization of the KitchenFlashAttention module.
+        """
         extra_kwargs = _get_extra_kitchen_kwargs(self.config)
         self.kitchen_quant_params = KitchenQuantizationParams.parse_from_config(quantization_config)
         extra_kwargs["qfa_params"] = self.kitchen_quant_params.qfa_params
@@ -1435,12 +1465,18 @@ class KitchenFlashAttention(MegatronModule):
             )
 
         if attn_mask_type is not None:
-            assert attn_mask_type == AttnMaskType.causal, "Only causal mask is supported for KitchenFlashAttention."
+            assert (
+                attn_mask_type == AttnMaskType.causal
+            ), "Only causal mask is supported for KitchenFlashAttention."
         attn_mask_type_str = "causal"
 
         # TODO(Frank): Figure out the story for qkv_layout
         core_attn_out = self.flash_attention_module(
-            query, key, value, attn_mask_type=attn_mask_type_str, window_size=self.config.window_size,
+            query,
+            key,
+            value,
+            attn_mask_type=attn_mask_type_str,
+            window_size=self.config.window_size,
             is_first_microbatch=_is_first_microbatch,
         )
         self.is_first_microbatch = False
@@ -1470,10 +1506,10 @@ class KitchenDotProductAttention(MegatronModule):
         layer_number: int,
         attn_mask_type: AttnMaskType,
         attention_type: str,
-        attention_dropout: float = None,
-        softmax_scale: float = None,
-        cp_comm_type: str = None,
-        model_comm_pgs: ModelCommProcessGroups = None,
+        attention_dropout: Optional[float] = None,
+        softmax_scale: Optional[float] = None,
+        cp_comm_type: Optional[str] = None,
+        model_comm_pgs: Optional[ModelCommProcessGroups] = None,
     ):
         super().__init__(config=config)
 
@@ -1491,7 +1527,9 @@ class KitchenDotProductAttention(MegatronModule):
         self.attn_mask_type = attn_mask_type
         self.attention_type = attention_type  # unused for now
 
-        projection_size = self.config.kv_channels * self.config.num_attention_heads
+        kv_channels = self.config.kv_channels
+        assert kv_channels is not None, "kv_channels must be set for KitchenFlashAttention"
+        projection_size = kv_channels * self.config.num_attention_heads
 
         # Per attention head and per partition values.
         if model_comm_pgs is None:
@@ -1537,6 +1575,9 @@ class KitchenDotProductAttention(MegatronModule):
         self.init_finished = False
 
     def finish_init(self, quantization_config: QuantizationConfig):
+        """
+        Finishes the initialization of the KitchenDotProductAttention module.
+        """
         extra_kwargs = _get_extra_kitchen_kwargs(self.config)
         self.kitchen_quant_params = KitchenQuantizationParams.parse_from_config(quantization_config)
         extra_kwargs["qattention_params"] = self.kitchen_quant_params.qattention_params
@@ -1592,21 +1633,23 @@ class KitchenDotProductAttention(MegatronModule):
         # [sk, b, np, hn] -> [sk, b * np, hn]
         key = key.view(output_size[3], output_size[0] * output_size[1], -1)
 
-        bmm_args = []
+        bmm_args: List[Any] = []
         if torch.is_grad_enabled():
             bmm_fn = self.auto_grad_qbmm.apply
         else:
             bmm_fn = self.auto_grad_qbmm.forward
             bmm_args.append(None)
-        bmm_args.extend([
-            query,
-            key,
-            self.softmax_scale,
-            False,
-            torch.is_grad_enabled(),
-            self.layer_number,
-            self.qattention_params
-        ])
+        bmm_args.extend(
+            [
+                query,
+                key,
+                self.softmax_scale,
+                False,
+                torch.is_grad_enabled(),
+                self.layer_number,
+                self.qattention_params,
+            ]
+        )
         # Raw attention scores. [b * np, sq, sk]
         matmul_result = bmm_fn(*bmm_args)
 
@@ -1652,15 +1695,17 @@ class KitchenDotProductAttention(MegatronModule):
         else:
             bmm_fn = self.auto_grad_qbmm.forward
             bmm_args.append(None)
-        bmm_args.extend([
-            attention_probs,
-            value,
-            1.0,
-            True,
-            torch.is_grad_enabled(),
-            self.layer_number,
-            self.qattention_params,
-        ])
+        bmm_args.extend(
+            [
+                attention_probs,
+                value,
+                1.0,
+                True,
+                torch.is_grad_enabled(),
+                self.layer_number,
+                self.qattention_params,
+            ]
+        )
         context = bmm_fn(*bmm_args)
         # change view [b, np, sq, hn]
         context = context.view(*output_size)
@@ -1761,4 +1806,4 @@ class KitchenSpecProvider(BackendSpecProvider):
 
     def activation_func(self) -> type:
         """Which module to use for activation function"""
-        return None
+        return self.fallback.activation_func()

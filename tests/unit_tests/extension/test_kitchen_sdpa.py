@@ -1,40 +1,46 @@
+import os
 import queue
 from typing import Literal, Tuple
 
+import pytest
 import torch
-from megatron.core.transformer.dot_product_attention import DotProductAttention
-from megatron.core.transformer.module import MegatronModule
-from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.transformer.enums import AttnMaskType
+
+from megatron.core import parallel_state
+from megatron.core.extensions.kitchen import KitchenDotProductAttention, KitchenFlashAttention
+from megatron.core.extensions.transformer_engine import TEDotProductAttention
 from megatron.core.process_groups_config import ModelCommProcessGroups
 from megatron.core.quantization.quant_config import RecipeConfig
-from megatron.core import parallel_state
 from megatron.core.quantization.utils import get_quant_config_or_none
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
-
+from megatron.core.transformer.dot_product_attention import DotProductAttention
+from megatron.core.transformer.enums import AttnMaskType
+from megatron.core.transformer.module import MegatronModule
+from megatron.core.transformer.transformer_config import TransformerConfig
 from tests.unit_tests.test_utilities import Utils
 
-import pytest
-import os
-
 try:
-    import nvidia_kitchen
-    from megatron.core.extensions.kitchen import KitchenDotProductAttention, KitchenFlashAttention
+    import nvidia_kitchen  # type: ignore[import-not-found]
+
     HAVE_KITCHEN = True
 except ImportError:
+    from unittest.mock import MagicMock
+
     HAVE_KITCHEN = False
-    KitchenDotProductAttention = None
-    KitchenFlashAttention = None
+    nvidia_kitchen = MagicMock()
 
 try:
-    import transformer_engine
-    from megatron.core.extensions.transformer_engine import TEDotProductAttention
-    from transformer_engine.pytorch.attention import dot_product_attention
+    import transformer_engine  # type: ignore[import-untyped]
+    from transformer_engine.pytorch.attention import (  # type: ignore[import-untyped]
+        dot_product_attention,
+    )
 
     HAVE_TE = True
 except ImportError:
+    from unittest.mock import MagicMock
+
     HAVE_TE = False
-    TEDotProductAttention = None
+    transformer_engine = MagicMock()
+    dot_product_attention = MagicMock()
 
 
 # Create custom process groups
@@ -121,7 +127,7 @@ def get_attention_implementation(
 class DotProductAttentionModel(torch.nn.Module):
     def __init__(
         self,
-        impl: Literal["megatron", "te", "kitchen", "kitchen-fa"],
+        impl: Literal["megatron", "te-fa", "te-unfused", "kitchen", "kitchen-fa"],
         config: TransformerConfig,
         layer_number: int,
         attn_mask_type: AttnMaskType,
@@ -274,18 +280,24 @@ class CompareImplementations:
             softmax_scale,
         )
 
-        query_layer, key_layer, value_layer = q,k,v
+        query_layer, key_layer, value_layer = q, k, v
 
-        out1, q_grad1, k_grad1, v_grad1 = self.run_attention_one_step(layer1,
-        query_layer.clone().detach().requires_grad_(True),
-        key_layer.clone().detach().requires_grad_(True),
-        value_layer.clone().detach().requires_grad_(True),
-        grad.clone().detach().requires_grad_(True), attn_mask_type)
-        out2, q_grad2, k_grad2, v_grad2 = self.run_attention_one_step(layer2,
-        query_layer.clone().detach().requires_grad_(True),
-        key_layer.clone().detach().requires_grad_(True),
-        value_layer.clone().detach().requires_grad_(True),
-        grad.clone().detach().requires_grad_(True), attn_mask_type)
+        out1, q_grad1, k_grad1, v_grad1 = self.run_attention_one_step(
+            layer1,
+            query_layer.clone().detach().requires_grad_(True),
+            key_layer.clone().detach().requires_grad_(True),
+            value_layer.clone().detach().requires_grad_(True),
+            grad.clone().detach().requires_grad_(True),
+            attn_mask_type,
+        )
+        out2, q_grad2, k_grad2, v_grad2 = self.run_attention_one_step(
+            layer2,
+            query_layer.clone().detach().requires_grad_(True),
+            key_layer.clone().detach().requires_grad_(True),
+            value_layer.clone().detach().requires_grad_(True),
+            grad.clone().detach().requires_grad_(True),
+            attn_mask_type,
+        )
 
         torch.testing.assert_close(out1, out2, atol=out_error, rtol=0.0)
         torch.testing.assert_close(q_grad1, q_grad2, atol=q_grad_error, rtol=0.0)
@@ -293,7 +305,10 @@ class CompareImplementations:
         torch.testing.assert_close(v_grad1, v_grad2, atol=v_grad_error, rtol=0.0)
 
 
-@pytest.mark.skipif(not HAVE_KITCHEN or not HAVE_TE, reason="Kitchen and Transformer Engine required for using kitchen backend.")
+@pytest.mark.skipif(
+    not HAVE_KITCHEN or not HAVE_TE,
+    reason="Kitchen and Transformer Engine required for using kitchen backend.",
+)
 @pytest.mark.parametrize(
     "impl1, impl2, errors",
     [
@@ -355,7 +370,10 @@ def test_attention_implementations(
                     "bf16": {"kitchen_config_type": "QLinearParams", "recipe_idx": 1},
                     "fp8_cs": {"kitchen_config_type": "QLinearParams", "recipe_idx": 2},
                     "bf16_attn": {"kitchen_config_type": "QAttentionParams", "recipe_idx": 1},
-                    "bf16_fa": {"kitchen_config_type": "QFlashAttentionParams", "recipe_name": "triton_fa_bf16_for_all_natural"},
+                    "bf16_fa": {
+                        "kitchen_config_type": "QFlashAttentionParams",
+                        "recipe_name": "triton_fa_bf16_for_all_natural",
+                    },
                 },
             }
         ),
@@ -378,7 +396,10 @@ def test_attention_implementations(
     )
 
 
-@pytest.mark.skipif(not HAVE_KITCHEN or not HAVE_TE, reason="Kitchen and Transformer Engine required for using kitchen backend.")
+@pytest.mark.skipif(
+    not HAVE_KITCHEN or not HAVE_TE,
+    reason="Kitchen and Transformer Engine required for using kitchen backend.",
+)
 @pytest.mark.parametrize(
     "impl1, impl2, errors",
     [
