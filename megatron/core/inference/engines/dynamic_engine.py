@@ -1250,7 +1250,6 @@ class DynamicInferenceEngine(AbstractEngine):
                 sampling_params = SamplingParams.deserialize(sampling_params)
                 self.add_request(request_id, prompt, sampling_params)
             elif header == Headers.PAUSE:
-                self.paused = True
                 # Send PAUSE_ACK back to coordinator.
                 if rank == 0:
                     payload = msgpack.packb(
@@ -1259,7 +1258,6 @@ class DynamicInferenceEngine(AbstractEngine):
                     )
                     self.socket_for_receiving_requests.send(payload)
             elif header == Headers.STOP:
-                self.stopped = True
                 # Send STOP_ACK back to coordinator.
                 if rank == 0:
                     payload = msgpack.packb(
@@ -1267,6 +1265,10 @@ class DynamicInferenceEngine(AbstractEngine):
                         use_bin_type=True,
                     )
                     self.socket_for_receiving_requests.send(payload)
+            elif header == Headers.PAUSE_ACK:
+                self.paused = True
+            elif header == Headers.STOP_ACK:
+                self.stopped = True
             elif header == Headers.UNPAUSE:
                 self.paused = False
             elif header == Headers.SUSPEND:
