@@ -1291,7 +1291,7 @@ class DynamicInferenceEngine(AbstractEngine):
                 break
             elif header == Headers.PAUSE_ACK:
                 self.paused.set()
-                self.microbatch_suspend = False
+                self.microbatch_pause = False
             elif header == Headers.STOP_ACK:
                 self.stopped.set()
                 self.stop()
