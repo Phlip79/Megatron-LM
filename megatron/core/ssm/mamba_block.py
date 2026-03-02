@@ -159,7 +159,6 @@ class MambaStack(GraphableMegatronModule, MegatronModule):
                         pg_collection=pg_collection,
                         is_mtp_layer=is_mtp_layer,
                         add_layer_offset=False,
-                        pp_layer_offset=pp_layer_offset,
                     )
                 else:
                     assert False, "unexpected layer_type"
