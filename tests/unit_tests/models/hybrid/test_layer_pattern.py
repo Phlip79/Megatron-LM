@@ -13,7 +13,6 @@ import pytest
 
 from megatron.core.models.hybrid.common_layer_config import CommonLayerConfig
 from megatron.core.models.hybrid.hybrid_layer_allocation import Symbols
-from megatron.core.models.hybrid.hybrid_model_config import HybridModelConfig
 from megatron.core.models.hybrid.layer_configs import (
     AttentionLayerConfig,
     CrossEntropyLayerConfig,
@@ -26,6 +25,7 @@ from megatron.core.models.hybrid.layer_configs import (
     MoELayerConfig,
 )
 from megatron.core.models.hybrid.layer_pattern import flatten_decoder_pattern
+from megatron.training.models.hybrid import HybridModelConfig
 
 # ``HybridModelConfig._lower()`` now returns a 3-tuple
 # ``(stack_tc, layer_symbols, layer_tcs)``; the previous ``_RecipeLowering``

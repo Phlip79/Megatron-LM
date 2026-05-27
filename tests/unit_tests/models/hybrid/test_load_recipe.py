@@ -21,7 +21,6 @@ from pathlib import Path
 import pytest
 
 from megatron.core.models.hybrid.common_layer_config import CommonLayerConfig
-from megatron.core.models.hybrid.hybrid_model_config import HybridModelConfig
 from megatron.core.models.hybrid.layer_configs import (
     AttentionLayerConfig,
     CrossEntropyLayerConfig,
@@ -29,6 +28,7 @@ from megatron.core.models.hybrid.layer_configs import (
     MambaLayerConfig,
 )
 from megatron.core.models.hybrid.layer_pattern import RECIPE_ENTRY_POINT, load_recipe
+from megatron.training.models.hybrid import HybridModelConfig
 
 
 def _make_common(**overrides) -> CommonLayerConfig:
@@ -197,8 +197,9 @@ class TestFilesystemPath:
             """
             from megatron.core.models.hybrid import (
                 AttentionLayerConfig, CommonLayerConfig, CrossEntropyLayerConfig,
-                EmbeddingLayerConfig, HybridModelConfig,
+                EmbeddingLayerConfig,
             )
+            from megatron.training.models.hybrid import HybridModelConfig
             def make_recipe() -> HybridModelConfig:
                 common = CommonLayerConfig(hidden_size=128, use_cpu_initialization=True)
                 return HybridModelConfig(
@@ -221,8 +222,9 @@ class TestFilesystemPath:
             """
             from megatron.core.models.hybrid import (
                 AttentionLayerConfig, CommonLayerConfig, CrossEntropyLayerConfig,
-                EmbeddingLayerConfig, HybridModelConfig,
+                EmbeddingLayerConfig,
             )
+            from megatron.training.models.hybrid import HybridModelConfig
             def my_pretrain_config() -> HybridModelConfig:
                 common = CommonLayerConfig(hidden_size=128, use_cpu_initialization=True)
                 return HybridModelConfig(

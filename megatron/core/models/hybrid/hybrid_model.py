@@ -1,7 +1,9 @@
 # Copyright (c) 2023-2026, NVIDIA CORPORATION. All rights reserved.
 
+from __future__ import annotations
+
 import logging
-from typing import Literal, Optional, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import torch
 from torch import Tensor
@@ -14,7 +16,6 @@ from megatron.core.models.common.embeddings.language_model_embedding import Lang
 from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 from megatron.core.models.common.embeddings.yarn_rotary_pos_embedding import YarnRotaryEmbedding
 from megatron.core.models.common.language_module.language_module import LanguageModule
-from megatron.core.models.hybrid.hybrid_model_config import HybridModelConfig
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.pipeline_parallel.fine_grained_activation_offload import (
     FineGrainedActivationOffloadingInterface as off_interface,
@@ -40,6 +41,13 @@ from megatron.core.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from megatron.training.models.hybrid import HybridModelConfig
+
+
+def _is_recipe_config(config: object) -> bool:
+    return bool(getattr(config, "is_recipe_config", False))
 
 
 class HybridModel(LanguageModule, GraphableMegatronModule):
@@ -174,7 +182,7 @@ class HybridModel(LanguageModule, GraphableMegatronModule):
         layer_config_list: Optional[list] = None
         recipe_path: bool = False
 
-        if isinstance(config, HybridModelConfig):
+        if _is_recipe_config(config):
             if (
                 hybrid_layer_pattern is not None
                 or hybrid_override_pattern is not None

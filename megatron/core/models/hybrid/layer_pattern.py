@@ -12,20 +12,24 @@ the :class:`HybridModelConfig` ready to feed into :class:`HybridModel` via
 ``HybridModel(config=recipe)``.
 """
 
+from __future__ import annotations
+
 import hashlib
 import importlib
 import importlib.util
 import os
 import sys
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
-from megatron.core.models.hybrid.hybrid_model_config import HybridModelConfig
 from megatron.core.models.hybrid.layer_configs import (
     CrossEntropyLayerConfig,
     EmbeddingLayerConfig,
     LayerConfig,
 )
+
+if TYPE_CHECKING:
+    from megatron.training.models.hybrid import HybridModelConfig
 
 # Canonical recipe entry point. When a recipe module / file omits the
 # ``:func`` suffix, this function name is preferred as the default recipe.
@@ -166,6 +170,8 @@ def _call_recipe_function(fn, origin: str, source: str) -> HybridModelConfig:
 
 
 def _ensure_hybrid_model_config(value, origin: str, source: str) -> HybridModelConfig:
+    from megatron.training.models.hybrid import HybridModelConfig
+
     if not isinstance(value, HybridModelConfig):
         raise TypeError(
             f"--model-recipe {origin!r}: {source!r} returned "

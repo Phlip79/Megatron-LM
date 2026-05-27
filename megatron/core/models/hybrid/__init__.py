@@ -1,7 +1,6 @@
 # Copyright (c) 2024-2026, NVIDIA CORPORATION. All rights reserved.
 
 from megatron.core.models.hybrid.common_layer_config import CommonLayerConfig
-from megatron.core.models.hybrid.hybrid_model_config import HybridModelConfig
 from megatron.core.models.hybrid.layer_configs import (
     AttentionLayerConfig,
     CrossEntropyLayerConfig,
@@ -18,6 +17,15 @@ from megatron.core.models.hybrid.layer_pattern import (
     flatten_decoder_pattern,
     load_recipe,
 )
+
+
+def __getattr__(name):
+    if name == "HybridModelConfig":
+        from megatron.training.models.hybrid import HybridModelConfig
+
+        return HybridModelConfig
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "AttentionLayerConfig",

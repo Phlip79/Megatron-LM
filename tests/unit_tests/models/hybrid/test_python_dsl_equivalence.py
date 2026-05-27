@@ -25,7 +25,6 @@ from megatron.core.models.hybrid import (
     CommonLayerConfig,
     CrossEntropyLayerConfig,
     EmbeddingLayerConfig,
-    HybridModelConfig,
     MambaLayerConfig,
     MLPLayerConfig,
 )
@@ -33,6 +32,7 @@ from megatron.core.models.hybrid.hybrid_layer_specs import hybrid_stack_spec
 from megatron.core.models.hybrid.hybrid_model import HybridModel
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 from megatron.core.transformer import TransformerConfig
+from megatron.training.models.hybrid import HybridModelConfig
 from tests.unit_tests.test_utilities import Utils
 
 
