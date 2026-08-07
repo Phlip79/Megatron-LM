@@ -1,10 +1,12 @@
 # The proxy model is used for local code quality check.
 # The proxy model should contain all the necessary components and settings but fewer parameters.
 ENV_VARS:
-  TORCH_NCCL_AVOID_RECORD_STREAMS: 0
+  TORCH_NCCL_AVOID_RECORD_STREAMS: 1
+  TORCH_NCCL_HIGH_PRIORITY: 1
   NVTE_ALLOW_NONDETERMINISTIC_ALGO: 1
   PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
   NCCL_NVLS_ENABLE: 0
+  NCCL_GRAPH_REGISTER: 0
   NVTE_FUSED_ATTN: 1
   NVTE_NORM_FWD_USE_CUDNN: 1
   NVTE_NORM_BWD_USE_CUDNN: 1
@@ -12,9 +14,13 @@ ENV_VARS:
   NCCL_DEBUG: VERSION
   NON_DETERMINSTIC_RESULTS: 1
   NVSHMEM_IB_ENABLE_IBGDA: 0
-  CUDA_DEVICE_MAX_CONNECTIONS: 1
+  CUDA_DEVICE_MAX_CONNECTIONS: 32
   NUM_OF_HYBRID_EP_RANKS_PER_NVLINK_DOMAIN: 8
+  NUM_OF_TOKENS_PER_CHUNK_COMBINE_API: 128
+  NVLINK_DOMAIN_SIZE: 72
   USE_MNNVL: 1
+  NVTE_FWD_LAYERNORM_SM_MARGIN: 20
+  NVTE_BWD_LAYERNORM_SM_MARGIN: 20
 TEST_TYPE: "release"
 LAUNCHER: ft_launcher
 MODEL_ARGS:
@@ -43,7 +49,7 @@ MODEL_ARGS:
   --cross-entropy-loss-fusion: true
   --cross-entropy-fusion-impl: native
   --manual-gc: true
-  --manual-gc-interval: 10
+  --manual-gc-interval: 100
 
   # Transformer Engine args
   --transformer-impl: transformer_engine
@@ -103,6 +109,7 @@ MODEL_ARGS:
   --moe-router-topk: 8
   --moe-token-dispatcher-type: flex
   --moe-flex-dispatcher-backend: hybridep
+  --moe-flex-dispatcher-num-sms: 32
   --moe-router-pre-softmax: true
   --moe-grouped-gemm: true
   --moe-aux-loss-coeff: 1e-4
@@ -146,7 +153,6 @@ MODEL_ARGS:
   --log-timers-to-tensorboard: true
   --log-memory-to-tensorboard: true
   --log-num-zeros-in-grad: true
-  --log-params-norm: true
   --log-validation-ppl-to-tensorboard: true
   --log-throughput: true
   --log-interval: 1
