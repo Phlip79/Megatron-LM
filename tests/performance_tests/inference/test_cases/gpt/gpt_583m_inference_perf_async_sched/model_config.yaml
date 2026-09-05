@@ -1,7 +1,7 @@
 # Inference perf test: 583M mcore-mistral checkpoint, TP=1 PP=1 DP=8 (8 GPUs),
 # async prefill scheduling enabled.
 #
-# Same 583M checkpoint / DP=8 dynamic-batching path as gpt_583m_perf, but the
+# Same 583M checkpoint / DP=8 dynamic-batching path as gpt_583m_inference_perf, but the
 # server runs with --inference-dynamic-batching-async-sched-mode async (the
 # scheduler overlaps prefill setup with GPU compute). Measures the throughput /
 # latency of the async scheduling path exercised by the functional test

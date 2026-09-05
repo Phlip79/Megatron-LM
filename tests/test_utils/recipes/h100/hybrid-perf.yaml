@@ -35,7 +35,7 @@ spec:
     cd /opt/megatron-lm
 
     ARGUMENTS=(
-        "CONFIG_PATH=tests/performance_tests/test_cases/hybrid/{test_case}/model_config.yaml"
+        "CONFIG_PATH=tests/performance_tests/inference/test_cases/hybrid/{test_case}/model_config.yaml"
         "CHECKPOINT_LOAD_PATH=/mnt/artifacts/"
         "RESULTS_ROOT={assets_dir}/perf_results"
     )
@@ -43,7 +43,7 @@ spec:
     GPUS_PER_NODE=1 bash ./tests/performance_tests/shell_test_utils/run_perf_test.sh ${{ARGUMENTS[@]}}
 
 products:
-  - test_case: [hybrid_2b_perf]
+  - test_case: [hybrid_2b_inference_perf]
     products:
       - environment: [dev]
         scope: [mr]

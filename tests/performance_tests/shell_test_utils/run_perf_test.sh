@@ -5,7 +5,7 @@
 # mirroring tests/functional_tests/shell_test_utils/run_ci_test.sh.
 #
 # Required:
-#   CONFIG_PATH=tests/performance_tests/test_cases/<model>/<case>/model_config.yaml
+#   CONFIG_PATH=tests/performance_tests/inference/test_cases/<model>/<case>/model_config.yaml
 #   CHECKPOINT_LOAD_PATH=/lustre/.../mcore_ci
 #   RESULTS_ROOT=/path/where/results.json/and/server-logs/go
 #

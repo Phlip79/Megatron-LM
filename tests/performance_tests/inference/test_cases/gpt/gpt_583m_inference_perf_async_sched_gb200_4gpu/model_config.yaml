@@ -1,15 +1,19 @@
-# Inference perf test: 583M mcore-mistral checkpoint, TP=1 PP=1 DP=4 (4 GPUs).
+# Inference perf test: 583M mcore-mistral checkpoint, TP=1 PP=1 DP=4 (4 GPUs),
+# async prefill scheduling enabled.
 #
-# GB200 single-node variant of gpt_583m_perf (which is DP=8 / 2 nodes on GB200).
-# GB200 nodes have a 4-GPU/node limit, so the DP=8 single-node configuration
-# used on H100 doesn't fit on a single GB200 node. This is a separate test
-# (different world size, different baseline) — not a multi-node port of the
-# DP=8 case.
+# GB200 single-node variant of gpt_583m_inference_perf_async_sched. GB200 nodes have a
+# 4-GPU/node limit, so the DP=8 configuration used on H100 doesn't fit on a
+# single GB200 node. This is a separate test (different world size, different
+# baseline) — not a multi-node port of the DP=8 case.
+#
+# The server runs with --inference-dynamic-batching-async-sched-mode async.
+# ASYNC_SCHED pins this A/B case to async regardless of the application default.
 
 MODEL: gpt_583m
 TP: 1
 PP: 1
 DP: 4
+ASYNC_SCHED: true
 NUM_INPUT_TOKENS: 512
 NUM_OUTPUT_TOKENS: 128
 # 2 warmup iters can leave the first timed iteration cold on GB200, poisoning

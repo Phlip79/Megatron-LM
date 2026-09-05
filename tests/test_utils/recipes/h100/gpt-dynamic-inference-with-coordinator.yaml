@@ -94,5 +94,5 @@ products:
         scope: [mr]
         platforms: [dgx_h100]
   # Throughput coverage for this 583M dynamic-batching DP=8 config now lives at
-  # tests/performance_tests/test_cases/gpt/gpt_583m_perf/ — see
-  # skills/run-performance-tests/SKILL.md for the harness it runs under.
+  # tests/performance_tests/inference/test_cases/gpt/gpt_583m_inference_perf/ — see
+  # tests/performance_tests/README.md for the harness layout.
