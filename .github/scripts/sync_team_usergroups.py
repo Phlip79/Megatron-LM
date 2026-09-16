@@ -206,6 +206,10 @@ def github_team_to_usergroup_name(team_slug):
 
     Example: "test3" -> "Megatron Core Experts: Test3"
     """
+    if team_slug == "training":
+        # Slack requires a unique name as well as a unique handle.
+        return "Megatron Training"
+
     # Title case each word separated by hyphens, then join with spaces
     words = team_slug.split("-")
     title_cased = " ".join(word.capitalize() for word in words)
